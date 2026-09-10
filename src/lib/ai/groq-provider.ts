@@ -76,24 +76,48 @@ function parseJSON<T>(text: string): T {
   return JSON.parse(cleaned.slice(start, end + 1))
 }
 
+const DEFAULT_MODELS = [
+  'openai/gpt-oss-20b',
+  'groq/compound',
+  'qwen/qwen3.6-27b',
+  'openai/gpt-oss-120b',
+]
+
 async function callGroq(
   client: Groq,
   systemPrompt: string,
   userPrompt: string,
-  model = 'llama-3.3-70b-versatile',
+  requestedModel = 'openai/gpt-oss-20b',
   maxTokens = 4096
 ): Promise<string> {
-  const completion = await client.chat.completions.create({
-    model,
-    max_tokens: maxTokens,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-    temperature: 0.3,
-  })
+  const modelsToTry = Array.from(new Set([requestedModel, ...DEFAULT_MODELS]))
+  let lastError: any = null
 
-  return completion.choices[0]?.message?.content ?? ''
+  for (const model of modelsToTry) {
+    try {
+      const completion = await client.chat.completions.create({
+        model,
+        max_tokens: maxTokens,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.3,
+      })
+
+      return completion.choices[0]?.message?.content ?? ''
+    } catch (err: any) {
+      console.warn(`Groq model '${model}' error, trying fallback model...`, err?.message)
+      lastError = err
+      // Try next model if 404 / model not found or bad request
+      if (err?.status === 404 || err?.code === 'model_not_found' || err?.status === 400) {
+        continue
+      }
+      throw err
+    }
+  }
+
+  throw lastError ?? new Error('All AI models failed')
 }
 
 // ─── Groq Provider ────────────────────────────────────────────────────────────
@@ -105,7 +129,7 @@ export class GroqProvider implements AIProvider {
         client,
         SUMMARY_PROMPT(input),
         `Content to summarize:\n\n${input.content.slice(0, 12000)}`,
-        'llama-3.3-70b-versatile',
+        'openai/gpt-oss-20b',
         3000
       )
     )
@@ -120,7 +144,7 @@ export class GroqProvider implements AIProvider {
         client,
         QUIZ_PROMPT(input),
         `Study material:\n\n${input.content.slice(0, 10000)}`,
-        'llama-3.3-70b-versatile',
+        'openai/gpt-oss-20b',
         4096
       )
     )
@@ -136,7 +160,7 @@ export class GroqProvider implements AIProvider {
         client,
         FLASHCARD_PROMPT(input),
         `Study material:\n\n${input.content.slice(0, 10000)}`,
-        'llama-3.3-70b-versatile',
+        'openai/gpt-oss-20b',
         3000
       )
     )
@@ -162,13 +186,24 @@ export class GroqProvider implements AIProvider {
     ]
 
     const raw = await withKeyFallback(async (client) => {
-      const completion = await client.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 2048,
-        messages,
-        temperature: 0.4,
-      })
-      return completion.choices[0]?.message?.content ?? ''
+      let lastErr: any = null
+      for (const model of DEFAULT_MODELS) {
+        try {
+          const completion = await client.chat.completions.create({
+            model,
+            max_tokens: 2048,
+            messages,
+            temperature: 0.4,
+          })
+          return completion.choices[0]?.message?.content ?? ''
+        } catch (e: any) {
+          console.warn(`Tutor model '${model}' failed, trying next...`, e?.message)
+          lastErr = e
+          if (e?.status === 404 || e?.code === 'model_not_found') continue
+          throw e
+        }
+      }
+      throw lastErr || new Error('Tutor AI models failed')
     })
 
     // Tutor responds in natural language, wrap it
@@ -185,7 +220,7 @@ export class GroqProvider implements AIProvider {
         client,
         EVALUATOR_PROMPT(input),
         `Student answer:\n${input.studentAnswer}`,
-        'llama-3.3-70b-versatile',
+        'openai/gpt-oss-20b',
         2000
       )
     )
@@ -200,7 +235,7 @@ export class GroqProvider implements AIProvider {
         client,
         PLANNER_PROMPT(input),
         `Create a study plan.`,
-        'llama-3.3-70b-versatile',
+        'openai/gpt-oss-20b',
         3000
       )
     )
@@ -219,7 +254,7 @@ export class GroqProvider implements AIProvider {
         client,
         `You are an educational analyst. Analyze quiz performance data and identify topics needing revision. Return JSON: {"recommendations": ["string", ...]}`,
         `Topics performance:\n${topicSummary}\nSubject: ${input.subject ?? 'Unknown'}`,
-        'llama3-8b-8192',
+        'openai/gpt-oss-20b',
         1000
       )
     )
