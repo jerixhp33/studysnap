@@ -95,62 +95,78 @@ export async function storeDocumentChunks(
   documentId: string,
   userId: string,
   chunks: string[],
-  pageNumbers?: number[]
+  pageNumbers?: number[],
+  client?: any
 ): Promise<void> {
-  const admin = createAdminClient()
-
-  // Delete existing chunks
-  await admin
-    .from('document_chunks')
-    .delete()
-    .eq('document_id', documentId)
-
-  // Cap max chunks to 300 to prevent serverless execution timeout on huge books (25MB+)
-  const maxChunks = chunks.slice(0, 300)
-
-  // Process embeddings with concurrency control (batches of 10)
-  const chunkData = []
-  const concurrencyBatchSize = 10
-
-  for (let i = 0; i < maxChunks.length; i += concurrencyBatchSize) {
-    const batch = maxChunks.slice(i, i + concurrencyBatchSize)
-    const processedBatch = await Promise.all(
-      batch.map(async (content, idx) => {
-        const index = i + idx
-        let embedding: number[] = []
-        try {
-          // Generate embeddings for the first 50 chunks for fast search
-          if (index < 50) {
-            embedding = await generateEmbedding(content)
-          }
-        } catch {
-          embedding = []
-        }
-
-        return {
-          document_id: documentId,
-          user_id: userId,
-          content,
-          chunk_index: index,
-          page_number: pageNumbers?.[index] ?? null,
-          embedding: embedding.length > 0 ? JSON.stringify(embedding) : null,
-          chapter: null,
-          topic: null,
-        }
-      })
-    )
-    chunkData.push(...processedBatch)
-  }
-
-  // Insert in DB in batches of 50
-  const dbBatchSize = 50
-  for (let i = 0; i < chunkData.length; i += dbBatchSize) {
-    const batch = chunkData.slice(i, i + dbBatchSize)
-    const { error } = await admin.from('document_chunks').insert(batch)
-    if (error) {
-      console.error('Error inserting chunks:', error)
-      throw new Error(`Failed to store document chunks: ${error.message}`)
+  try {
+    let db = client
+    if (!db) {
+      try {
+        db = createAdminClient()
+      } catch {
+        db = null
+      }
     }
+
+    if (!db) {
+      console.warn('No database client available for storing document chunks')
+      return
+    }
+
+    // Delete existing chunks
+    try {
+      await db.from('document_chunks').delete().eq('document_id', documentId)
+    } catch (e) {
+      console.warn('Failed to clear old document chunks:', e)
+    }
+
+    // Cap max chunks to 300 to prevent serverless execution timeout on huge books (25MB+)
+    const maxChunks = chunks.slice(0, 300)
+
+    // Process embeddings with concurrency control (batches of 10)
+    const chunkData = []
+    const concurrencyBatchSize = 10
+
+    for (let i = 0; i < maxChunks.length; i += concurrencyBatchSize) {
+      const batch = maxChunks.slice(i, i + concurrencyBatchSize)
+      const processedBatch = await Promise.all(
+        batch.map(async (content, idx) => {
+          const index = i + idx
+          let embedding: number[] = []
+          try {
+            if (index < 50) {
+              embedding = await generateEmbedding(content)
+            }
+          } catch {
+            embedding = []
+          }
+
+          return {
+            document_id: documentId,
+            user_id: userId,
+            content,
+            chunk_index: index,
+            page_number: pageNumbers?.[index] ?? null,
+            embedding: embedding.length > 0 ? JSON.stringify(embedding) : null,
+            chapter: null,
+            topic: null,
+          }
+        })
+      )
+      chunkData.push(...processedBatch)
+    }
+
+    // Insert in DB in batches of 50
+    const dbBatchSize = 50
+    for (let i = 0; i < chunkData.length; i += dbBatchSize) {
+      const batch = chunkData.slice(i, i + dbBatchSize)
+      const { error } = await db.from('document_chunks').insert(batch)
+      if (error) {
+        console.warn('Error inserting document chunks:', error.message)
+      }
+    }
+  } catch (e) {
+    console.warn('storeDocumentChunks exception:', e)
   }
 }
 

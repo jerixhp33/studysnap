@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     // Chunk and index
     await supabase.from('documents').update({ status: 'indexing' }).eq('id', document_id)
     const chunks = chunkText(extractedText)
-    await storeDocumentChunks(document_id, user.id, chunks)
+    await storeDocumentChunks(document_id, user.id, chunks, undefined, supabase)
 
     // Done
     await supabase.from('documents').update({ status: 'ready' }).eq('id', document_id)
