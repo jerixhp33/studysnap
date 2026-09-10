@@ -113,8 +113,9 @@ export function UploadDocumentDialog({ subjects, autoOpen = false, triggerLabel 
         if ((s as string) === 'failed' || attempts > 60) { clearInterval(poll); setStatus('error'); setError('Processing failed. Please retry.') }
       }, 2000)
 
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Upload failed'
+    } catch (e: any) {
+      console.error('Upload error:', e)
+      const msg = e?.message || e?.error_description || (typeof e === 'string' ? e : 'Upload failed')
       setError(msg); setStatus('error')
       toast({ type: 'error', title: 'Upload failed', description: msg })
     }
