@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     let pageCount = 1
 
     // Update: extracting
-    await admin.from('documents').update({ status: 'extracting' }).eq('id', document_id)
+    await supabase.from('documents').update({ status: 'extracting' }).eq('id', document_id)
 
     if (doc.file_type === 'pdf') {
       try {
