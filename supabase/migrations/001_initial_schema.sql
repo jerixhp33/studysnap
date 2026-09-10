@@ -431,13 +431,28 @@ END;
 $$ language 'plpgsql';
 
 -- Apply to tables with updated_at
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON profiles;
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_subjects_updated_at ON subjects;
 CREATE TRIGGER update_subjects_updated_at BEFORE UPDATE ON subjects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_chapters_updated_at ON chapters;
 CREATE TRIGGER update_chapters_updated_at BEFORE UPDATE ON chapters FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_documents_updated_at ON documents;
 CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON documents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_exams_updated_at ON exams;
 CREATE TRIGGER update_exams_updated_at BEFORE UPDATE ON exams FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_study_tasks_updated_at ON study_tasks;
 CREATE TRIGGER update_study_tasks_updated_at BEFORE UPDATE ON study_tasks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_weak_topics_updated_at ON weak_topics;
 CREATE TRIGGER update_weak_topics_updated_at BEFORE UPDATE ON weak_topics FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_usage_limits_updated_at ON usage_limits;
 CREATE TRIGGER update_usage_limits_updated_at BEFORE UPDATE ON usage_limits FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Increment usage count function (atomic)
@@ -544,7 +559,6 @@ ALTER TABLE exams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE study_tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE study_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE weak_topics ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_limits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_generations ENABLE ROW LEVEL SECURITY;
@@ -552,70 +566,92 @@ ALTER TABLE ai_generations ENABLE ROW LEVEL SECURITY;
 -- ─── RLS Policies ─────────────────────────────────────────────────────────────
 
 -- Profiles: users can only see/edit their own
+DROP POLICY IF EXISTS "profiles_own" ON profiles;
 CREATE POLICY "profiles_own" ON profiles FOR ALL USING (auth.uid() = id);
 
 -- Subjects
+DROP POLICY IF EXISTS "subjects_own" ON subjects;
 CREATE POLICY "subjects_own" ON subjects FOR ALL USING (auth.uid() = user_id);
 
 -- Chapters
+DROP POLICY IF EXISTS "chapters_own" ON chapters;
 CREATE POLICY "chapters_own" ON chapters FOR ALL USING (auth.uid() = user_id);
 
 -- Documents
+DROP POLICY IF EXISTS "documents_own" ON documents;
 CREATE POLICY "documents_own" ON documents FOR ALL USING (auth.uid() = user_id);
 
 -- Document chunks
+DROP POLICY IF EXISTS "chunks_own" ON document_chunks;
 CREATE POLICY "chunks_own" ON document_chunks FOR ALL USING (auth.uid() = user_id);
 
 -- Summaries
+DROP POLICY IF EXISTS "summaries_own" ON summaries;
 CREATE POLICY "summaries_own" ON summaries FOR ALL USING (auth.uid() = user_id);
 
 -- Questions
+DROP POLICY IF EXISTS "questions_own" ON questions;
 CREATE POLICY "questions_own" ON questions FOR ALL USING (auth.uid() = user_id);
 
 -- Quizzes
+DROP POLICY IF EXISTS "quizzes_own" ON quizzes;
 CREATE POLICY "quizzes_own" ON quizzes FOR ALL USING (auth.uid() = user_id);
 
 -- Quiz questions (via quiz ownership)
+DROP POLICY IF EXISTS "quiz_questions_own" ON quiz_questions;
 CREATE POLICY "quiz_questions_own" ON quiz_questions FOR ALL
   USING (EXISTS (
     SELECT 1 FROM quizzes WHERE quizzes.id = quiz_questions.quiz_id AND quizzes.user_id = auth.uid()
   ));
 
 -- Quiz attempts
+DROP POLICY IF EXISTS "quiz_attempts_own" ON quiz_attempts;
 CREATE POLICY "quiz_attempts_own" ON quiz_attempts FOR ALL USING (auth.uid() = user_id);
 
 -- Quiz answers (via attempt ownership)
+DROP POLICY IF EXISTS "quiz_answers_own" ON quiz_answers;
 CREATE POLICY "quiz_answers_own" ON quiz_answers FOR ALL
   USING (EXISTS (
     SELECT 1 FROM quiz_attempts WHERE quiz_attempts.id = quiz_answers.attempt_id AND quiz_attempts.user_id = auth.uid()
   ));
 
 -- Flashcards
+DROP POLICY IF EXISTS "flashcards_own" ON flashcards;
 CREATE POLICY "flashcards_own" ON flashcards FOR ALL USING (auth.uid() = user_id);
 
 -- Flashcard reviews
+DROP POLICY IF EXISTS "flashcard_reviews_own" ON flashcard_reviews;
 CREATE POLICY "flashcard_reviews_own" ON flashcard_reviews FOR ALL USING (auth.uid() = user_id);
 
 -- Exams
+DROP POLICY IF EXISTS "exams_own" ON exams;
 CREATE POLICY "exams_own" ON exams FOR ALL USING (auth.uid() = user_id);
 
 -- Study tasks
+DROP POLICY IF EXISTS "study_tasks_own" ON study_tasks;
 CREATE POLICY "study_tasks_own" ON study_tasks FOR ALL USING (auth.uid() = user_id);
 
 -- Study sessions
+DROP POLICY IF EXISTS "study_sessions_own" ON study_sessions;
 CREATE POLICY "study_sessions_own" ON study_sessions FOR ALL USING (auth.uid() = user_id);
 
 -- Weak topics
+DROP POLICY IF EXISTS "weak_topics_own" ON weak_topics;
 CREATE POLICY "weak_topics_own" ON weak_topics FOR ALL USING (auth.uid() = user_id);
 
 -- Notifications
+DROP POLICY IF EXISTS "notifications_own" ON notifications;
 CREATE POLICY "notifications_own" ON notifications FOR ALL USING (auth.uid() = user_id);
 
 -- Subscriptions
+DROP POLICY IF EXISTS "subscriptions_own" ON subscriptions;
 CREATE POLICY "subscriptions_own" ON subscriptions FOR SELECT USING (auth.uid() = user_id);
 
 -- Usage limits
+DROP POLICY IF EXISTS "usage_limits_own" ON usage_limits;
 CREATE POLICY "usage_limits_own" ON usage_limits FOR SELECT USING (auth.uid() = user_id);
 
 -- AI generations
+DROP POLICY IF EXISTS "ai_generations_own" ON ai_generations;
 CREATE POLICY "ai_generations_own" ON ai_generations FOR ALL USING (auth.uid() = user_id);
+
