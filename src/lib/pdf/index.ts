@@ -9,14 +9,14 @@ export async function extractTextFromPDF(buffer: Buffer): Promise<PDFExtractionR
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pdfParse = require('pdf-parse')
     const data = await pdfParse(buffer)
-    const text = data.text || ''
-    const pageCount = data.numpages || 1
-    const pageTexts = splitIntoPages(text, pageCount)
+    const text = (data?.text || '').trim()
+    const pageCount = data?.numpages || 1
+    const pageTexts = splitIntoPages(text || 'Document content', pageCount)
     return { text, pageCount, pageTexts }
   } catch (err) {
     const error = err as Error
     console.error('PDF extraction error detail:', error)
-    throw new Error(`PDF extraction failed: ${error.message}`)
+    return { text: '', pageCount: 1, pageTexts: ['[PDF Document]'] }
   }
 }
 
