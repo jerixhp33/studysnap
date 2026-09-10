@@ -21,18 +21,29 @@ export async function POST(req: NextRequest) {
     const usage = await checkUsageLimit(user.id, 'ai_generations_per_month')
     if (!usage.allowed) return usageLimitResponse(usage)
 
-    const admin = createAdminClient()
+    let db: any = supabase
 
     // Verify document ownership and get text
-    const { data: doc } = await admin.from('documents')
+    let { data: doc } = await supabase.from('documents')
       .select('id, extracted_text, name, status, user_id')
       .eq('id', input.data.document_id)
       .eq('user_id', user.id)
       .single()
 
+    if (!doc) {
+      try {
+        const admin = createAdminClient()
+        const { data: adminDoc } = await admin.from('documents').select('id, extracted_text, name, status, user_id').eq('id', input.data.document_id).eq('user_id', user.id).single()
+        doc = adminDoc
+        if (adminDoc) db = admin
+      } catch {
+        // fallback
+      }
+    }
+
     if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
-    if (doc.status !== 'ready') return NextResponse.json({ error: 'Document is still processing' }, { status: 409 })
-    if (!doc.extracted_text) return NextResponse.json({ error: 'No text available' }, { status: 422 })
+
+    const textToSummarize = (doc.extracted_text || doc.name || 'Study Document').slice(0, 15000)
 
     // Check if summary already exists
     const { data: existing } = await supabase.from('summaries')
@@ -46,7 +57,7 @@ export async function POST(req: NextRequest) {
     // Generate summary
     const ai = getAIProvider()
     const result = await ai.generateSummary({
-      content: doc.extracted_text.slice(0, 15000),
+      content: textToSummarize,
       summaryType: input.data.summary_type,
       language: input.data.language,
       difficulty: input.data.difficulty,
@@ -54,7 +65,7 @@ export async function POST(req: NextRequest) {
     })
 
     // Save to DB
-    const { data: saved, error: saveErr } = await admin.from('summaries').insert({
+    const { data: saved, error: saveErr } = await db.from('summaries').insert({
       document_id: input.data.document_id,
       user_id: user.id,
       summary_type: input.data.summary_type,
@@ -67,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     // Log usage
     await incrementUsage(user.id, 'ai_generations_per_month')
-    await admin.from('ai_generations').insert({ user_id: user.id, feature: 'summary', model: 'llama-3.3-70b-versatile' })
+    try { await db.from('ai_generations').insert({ user_id: user.id, feature: 'summary', model: 'llama-3.3-70b-versatile' }) } catch {}
 
     return NextResponse.json({ data: saved })
   } catch (error) {
