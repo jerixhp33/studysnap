@@ -538,8 +538,18 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ============================================================
--- ROW LEVEL SECURITY
+-- ROW LEVEL SECURITY & PERMISSIONS
 -- ============================================================
+
+-- Grant schema access to authenticated users
+GRANT USAGE ON SCHEMA public TO authenticated, anon;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, anon;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, anon;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO authenticated, anon;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authenticated, anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO authenticated, anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO authenticated, anon;
 
 -- Enable RLS on all user tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -567,7 +577,7 @@ ALTER TABLE ai_generations ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: users can only see/edit their own
 DROP POLICY IF EXISTS "profiles_own" ON profiles;
-CREATE POLICY "profiles_own" ON profiles FOR ALL USING (auth.uid() = id);
+CREATE POLICY "profiles_own" ON profiles FOR ALL USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
 -- Subjects
 DROP POLICY IF EXISTS "subjects_own" ON subjects;
