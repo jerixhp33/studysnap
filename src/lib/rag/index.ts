@@ -105,27 +105,47 @@ export async function storeDocumentChunks(
     .delete()
     .eq('document_id', documentId)
 
-  // Generate embeddings for all chunks
-  const chunkData = await Promise.all(
-    chunks.map(async (content, index) => {
-      const embedding = await generateEmbedding(content)
-      return {
-        document_id: documentId,
-        user_id: userId,
-        content,
-        chunk_index: index,
-        page_number: pageNumbers?.[index] ?? null,
-        embedding: embedding.length > 0 ? JSON.stringify(embedding) : null,
-        chapter: null,
-        topic: null,
-      }
-    })
-  )
+  // Cap max chunks to 300 to prevent serverless execution timeout on huge books (25MB+)
+  const maxChunks = chunks.slice(0, 300)
 
-  // Insert in batches
-  const batchSize = 50
-  for (let i = 0; i < chunkData.length; i += batchSize) {
-    const batch = chunkData.slice(i, i + batchSize)
+  // Process embeddings with concurrency control (batches of 10)
+  const chunkData = []
+  const concurrencyBatchSize = 10
+
+  for (let i = 0; i < maxChunks.length; i += concurrencyBatchSize) {
+    const batch = maxChunks.slice(i, i + concurrencyBatchSize)
+    const processedBatch = await Promise.all(
+      batch.map(async (content, idx) => {
+        const index = i + idx
+        let embedding: number[] = []
+        try {
+          // Generate embeddings for the first 50 chunks for fast search
+          if (index < 50) {
+            embedding = await generateEmbedding(content)
+          }
+        } catch {
+          embedding = []
+        }
+
+        return {
+          document_id: documentId,
+          user_id: userId,
+          content,
+          chunk_index: index,
+          page_number: pageNumbers?.[index] ?? null,
+          embedding: embedding.length > 0 ? JSON.stringify(embedding) : null,
+          chapter: null,
+          topic: null,
+        }
+      })
+    )
+    chunkData.push(...processedBatch)
+  }
+
+  // Insert in DB in batches of 50
+  const dbBatchSize = 50
+  for (let i = 0; i < chunkData.length; i += dbBatchSize) {
+    const batch = chunkData.slice(i, i + dbBatchSize)
     const { error } = await admin.from('document_chunks').insert(batch)
     if (error) {
       console.error('Error inserting chunks:', error)

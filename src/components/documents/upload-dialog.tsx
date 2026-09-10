@@ -106,11 +106,17 @@ export function UploadDocumentDialog({ subjects, autoOpen = false, triggerLabel 
       let attempts = 0
       const poll = setInterval(async () => {
         attempts++
-        const { data } = await supabase.from('documents').select('status').eq('id', doc.id).single()
+        const { data } = await supabase.from('documents').select('status, error_message').eq('id', doc.id).single()
         const s = (data?.status ?? "") as UploadStatus
         if (s) setStatus(s as UploadStatus)
         if ((s as string) === "ready") { clearInterval(poll); setStatus('done'); setTimeout(() => { close(); router.refresh() }, 1500) }
-        if ((s as string) === 'failed' || attempts > 60) { clearInterval(poll); setStatus('error'); setError('Processing failed. Please retry.') }
+        if ((s as string) === 'failed' || attempts > 60) {
+          clearInterval(poll)
+          setStatus('error')
+          const detailErr = data?.error_message || (attempts > 60 ? 'Processing timed out.' : 'Processing failed. Please retry.')
+          setError(detailErr)
+          toast({ type: 'error', title: 'Processing failed', description: detailErr })
+        }
       }, 2000)
 
     } catch (e: any) {
