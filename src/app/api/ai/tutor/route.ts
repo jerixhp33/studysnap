@@ -21,12 +21,26 @@ export async function POST(req: NextRequest) {
     const usage = await checkUsageLimit(user.id, 'tutor_questions_per_day')
     if (!usage.allowed) return usageLimitResponse(usage)
 
-    const admin = createAdminClient()
-
-    // Get subject name
     let subjectName: string | undefined
-    if (input.data.subject_id) {
-      const { data: sub } = await admin.from('subjects').select('name').eq('id', input.data.subject_id).single()
+    let contentFromDoc = ''
+
+    if (input.data.document_id) {
+      let { data: doc } = await supabase.from('documents').select('name, extracted_text').eq('id', input.data.document_id).eq('user_id', user.id).single()
+      if (!doc) {
+        try {
+          const admin = createAdminClient()
+          const { data: adminDoc } = await admin.from('documents').select('name, extracted_text').eq('id', input.data.document_id).single()
+          doc = adminDoc
+        } catch {}
+      }
+      if (doc) {
+        subjectName = doc.name
+        contentFromDoc = doc.extracted_text || doc.name
+      }
+    }
+
+    if (!subjectName && input.data.subject_id) {
+      const { data: sub } = await supabase.from('subjects').select('name').eq('id', input.data.subject_id).single()
       subjectName = sub?.name
     }
 
@@ -39,9 +53,13 @@ export async function POST(req: NextRequest) {
       subjectId: input.data.subject_id,
       limit: 4,
     })
-    const context = buildContext(relevantChunks)
+    const ragContext = buildContext(relevantChunks)
 
-    // Get conversation history from conversation_id if provided
+    // Fallback to full document text if RAG chunks are empty
+    const context = ragContext.trim()
+      ? ragContext
+      : (contentFromDoc ? `Document Name: ${subjectName}\n\nDocument Text:\n${contentFromDoc.slice(0, 10000)}` : '')
+
     const conversationHistory = body.conversation_history ?? []
 
     const ai = getAIProvider()
@@ -55,13 +73,13 @@ export async function POST(req: NextRequest) {
     })
 
     await incrementUsage(user.id, 'tutor_questions_per_day')
-    await admin.from('ai_generations').insert({ user_id: user.id, feature: 'tutor', model: 'llama-3.3-70b-versatile' })
+    await incrementUsage(user.id, 'ai_generations_per_month')
 
     return NextResponse.json({
       data: {
         answer: result.answer,
-        source_referenced: result.source_referenced,
-        context_used: relevantChunks.length > 0,
+        source_referenced: result.source_referenced || context.length > 0,
+        context_used: context.length > 0,
       }
     })
   } catch (error) {
