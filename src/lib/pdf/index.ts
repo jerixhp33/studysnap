@@ -7,12 +7,32 @@ export interface PDFExtractionResult {
 export async function extractTextFromPDF(buffer: Buffer): Promise<PDFExtractionResult> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require('pdf-parse')
-    const data = await pdfParse(buffer, { max: 0 })
-    const pageTexts = splitIntoPages(data.text, data.numpages)
-    return { text: data.text, pageCount: data.numpages, pageTexts }
+    const pdfModule = require('pdf-parse')
+    let text = ''
+    let pageCount = 1
+
+    if (typeof pdfModule === 'function') {
+      const data = await pdfModule(buffer, { max: 0 })
+      text = data.text || ''
+      pageCount = data.numpages || 1
+    } else if (pdfModule.PDFParse) {
+      const instance = new pdfModule.PDFParse({ data: buffer })
+      const data = await instance.getText()
+      text = data.text || ''
+      pageCount = data.total || 1
+    } else if (typeof pdfModule.default === 'function') {
+      const data = await pdfModule.default(buffer, { max: 0 })
+      text = data.text || ''
+      pageCount = data.numpages || 1
+    } else {
+      throw new Error('Unsupported pdf-parse module structure')
+    }
+
+    const pageTexts = splitIntoPages(text, pageCount)
+    return { text, pageCount, pageTexts }
   } catch (err) {
     const error = err as Error
+    console.error('PDF extraction error detail:', error)
     throw new Error(`PDF extraction failed: ${error.message}`)
   }
 }
