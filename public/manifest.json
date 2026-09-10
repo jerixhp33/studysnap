@@ -1,0 +1,21 @@
+{
+  "name": "StudySnap AI",
+  "short_name": "StudySnap",
+  "description": "Turn your notes into your personal AI study system",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f8f9fc",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["education", "productivity"],
+  "screenshots": [],
+  "shortcuts": [
+    { "name": "Upload Notes", "url": "/dashboard/notes?upload=1", "description": "Upload new study material" },
+    { "name": "AI Tutor", "url": "/dashboard/tutor", "description": "Ask your AI tutor" },
+    { "name": "Quick Quiz", "url": "/dashboard/quizzes", "description": "Take a quiz" }
+  ]
+}
