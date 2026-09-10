@@ -18,9 +18,14 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient()
 
-    // Verify ownership
-    const { data: doc } = await admin.from('documents').select('*').eq('id', document_id).eq('user_id', user.id).single()
-    if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+    // Verify ownership with retry for DB write propagation
+    let doc = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data } = await admin.from('documents').select('*').eq('id', document_id).single()
+      if (data) { doc = data; break }
+      await new Promise(r => setTimeout(r, 500))
+    }
+    if (!doc || doc.user_id !== user.id) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
 
     // Update status: reading
     await admin.from('documents').update({ status: 'reading' }).eq('id', document_id)
